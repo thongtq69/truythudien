@@ -1,0 +1,92 @@
+name: TruyThuDien
+options:
+  bundleIdPrefix: com.truythudien
+  deploymentTarget:
+    iOS: "15.0"
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+
+targets:
+  TruyThuDien:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+        type: group
+      - path: Resources
+        type: group
+    settings:
+      base:
+        INFOPLIST_FILE: Resources/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.truythudien.app
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_EMIT_LOC_STRINGS: YES
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleName: TruyThuDien
+        CFBundleDisplayName: Truy Thu Điện
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundlePackageType: APPL
+        CFBundleExecutable: $(EXECUTABLE_NAME)
+        AIProviderAPIKey: "sk-mM80RgGgqWImVzTD1bozFFxQdUN5w6BCKyaVTiagmxr1ser19R8zRIwPdyT70e34"
+        AIProviderChatEndpoint: "https://opencode.ai/zen/v1/chat/completions"
+        AIProviderChatModel: "big-pickle"
+        AIProviderEmbeddingEndpoint: ""
+        AIProviderEmbeddingModel: ""
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations: {}
+
+  TruyThuDienTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+        type: group
+    dependencies:
+      - target: TruyThuDien
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/TruyThuDien.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TruyThuDien"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+schemes:
+  TruyThuDien:
+    build:
+      targets:
+        TruyThuDien: all
+        TruyThuDienTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - TruyThuDienTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
