@@ -3,182 +3,130 @@ import Foundation
 final class ElectricityCalculationService {
     private let vatRate = ElectricityPrice.vatRate
     
-    func tinhChenhLech(customerInfo: CustomerInfo, tyLe: TyLeSuDung) -> CalculationResult {
-        let tongSanLuong = customerInfo.tongSanLuong
-        let phiKhac = customerInfo.phKhac
+    func tinhChenhLech(customerInfo: CustomerInfo) -> CalculationResult {
+        var finalResult = CalculationResult()
         
-        let sanLuongSH = tongSanLuong * tyLe.tyLeSinhHoat
-        let sanLuongSX = tongSanLuong * tyLe.tyLeSanXuat
-        let sanLuongKD = tongSanLuong * tyLe.tyLeKinhDoanh
-        let sanLuongHCSNBenhVien = tongSanLuong * tyLe.tyLeHCSNBenhVien
-        let sanLuongHCSNChieuSang = tongSanLuong * tyLe.tyLeHCSNChieuSang
+        for month in customerInfo.months {
+            // 1. Tính tiền ĐÚNG GIÁ (Thực tế - Reality)
+            let kqDungGia = tinhTienPhucHop(
+                sanLuong: month.consumption,
+                phiKhac: month.otherFee,
+                tyLe: month.tyLeReality,
+                soHo: customerInfo.soHoReality
+            )
+            
+            // 2. Tính tiền ĐÃ ÁP DỤNG (Hệ thống - Applied)
+            let kqDaApDung = tinhTienPhucHop(
+                sanLuong: month.consumption,
+                phiKhac: month.otherFee,
+                tyLe: month.tyLeApplied,
+                soHo: customerInfo.soHoApplied
+            )
+            
+            // Cộng dồn kết quả tổng
+            finalResult.tongTienDungGia += kqDungGia.tongTien
+            finalResult.tongTienDaTinh += kqDaApDung.tongTien
+            finalResult.chenhLech += (kqDungGia.tongTien - kqDaApDung.tongTien)
+            
+            // Lưu chi tiết từng tháng (cho phía Reality)
+            finalResult.chiTietTheoThang.append(MonthResult(
+                tenThang: month.name,
+                sanLuong: month.consumption,
+                tiềnDungGia: kqDungGia.tongTien,
+                chiTietBac: kqDungGia.chiTietBac
+            ))
+            
+            // Gộp chi tiết nhóm vào kết quả cuối cùng
+            if finalResult.chiTietTienDungGia.isEmpty {
+                finalResult.chiTietTienDungGia = kqDungGia.chiTietNhom
+            } else {
+                for i in 0..<finalResult.chiTietTienDungGia.count {
+                    finalResult.chiTietTienDungGia[i].kWh += kqDungGia.chiTietNhom[i].kWh
+                    finalResult.chiTietTienDungGia[i].tienTruocVAT += kqDungGia.chiTietNhom[i].tienTruocVAT
+                    finalResult.chiTietTienDungGia[i].tienVAT += kqDungGia.chiTietNhom[i].tienVAT
+                    finalResult.chiTietTienDungGia[i].tongTien += kqDungGia.chiTietNhom[i].tongTien
+                }
+            }
+            
+            // Gộp chi tiết bậc thang
+            if finalResult.chiTietSHBacThang.isEmpty {
+                finalResult.chiTietSHBacThang = kqDungGia.chiTietBac
+            } else {
+                for i in 0..<finalResult.chiTietSHBacThang.count {
+                    if let newIdx = kqDungGia.chiTietBac.firstIndex(where: { $0.tenBac == finalResult.chiTietSHBacThang[i].tenBac }) {
+                        finalResult.chiTietSHBacThang[i].kWh += kqDungGia.chiTietBac[newIdx].kWh
+                        finalResult.chiTietSHBacThang[i].tien += kqDungGia.chiTietBac[newIdx].tien
+                    }
+                }
+            }
+        }
         
-        let tienSH = tinhTienSinhHoat(sanLuong: sanLuongSH)
+        return finalResult
+    }
+    
+    // Hàm lõi: Tính tiền cho 1 cấu hình cụ thể
+    private func tinhTienPhucHop(sanLuong: Double, phiKhac: Double, tyLe: TyLeSuDung, soHo: Int) -> (tongTien: Double, chiTietBac: [BacTien], chiTietNhom: [NhomTien]) {
+        let sanLuongSH = sanLuong * tyLe.tyLeSinhHoat
+        let sanLuongSX = sanLuong * tyLe.tyLeSanXuat
+        let sanLuongKD = sanLuong * tyLe.tyLeKinhDoanh
+        let sanLuongHCSNBenhVien = sanLuong * tyLe.tyLeHCSNBenhVien
+        let sanLuongHCSNChieuSang = sanLuong * tyLe.tyLeHCSNChieuSang
+        
+        let tienSH = tinhTienSinhHoat(sanLuong: sanLuongSH, soHo: soHo)
         let tienSX = sanLuongSX * ElectricityPrice.donGiaSanXuat
         let tienKD = sanLuongKD * ElectricityPrice.donGiaKinhDoanh
         let tienHCSNBenhVien = sanLuongHCSNBenhVien * ElectricityPrice.donGiaHCSNBenhVien
         let tienHCSNChieuSang = sanLuongHCSNChieuSang * ElectricityPrice.donGiaHCSNChieuSang
         
-        let tongTienTruocVAT = tienSH.tienTruocVAT + tienSX + tienKD + tienHCSNBenhVien + tienHCSNChieuSang
-        let tongVAT = tienSH.tienVAT + tienSX * vatRate + tienKD * vatRate + tienHCSNBenhVien * vatRate + tienHCSNChieuSang * vatRate
-        let tongTienDungGia = tongTienTruocVAT + tongVAT + phiKhac
+        let tongTruocVAT = tienSH.tienTruocVAT + tienSX + tienKD + tienHCSNBenhVien + tienHCSNChieuSang
+        let tongVAT = tienSH.tienVAT + (tienSX + tienKD + tienHCSNBenhVien + tienHCSNChieuSang) * vatRate
+        let tongTien = tongTruocVAT + tongVAT + phiKhac
         
-        let tongTienDaTinh = tinhTienDaApDung(
-            loaiGia: customerInfo.loaiGiaDaApDung,
-            tongSanLuong: tongSanLuong,
-            phiKhac: phiKhac
-        )
-        
-        let chenhLech = tongTienDungGia - tongTienDaTinh
-        
-        let chiTietDungGia: [NhomTien] = [
-            NhomTien(
-                tenNhom: "Sinh hoạt bậc thang (SHBT)",
-                tyLe: tyLe.tyLeSinhHoat,
-                kWh: sanLuongSH,
-                donGia: 0,
-                tienTruocVAT: tienSH.tienTruocVAT,
-                tienVAT: tienSH.tienVAT,
-                tongTien: tienSH.tienTruocVAT + tienSH.tienVAT
-            ),
-            NhomTien(
-                tenNhom: "Sản xuất bình thường (SXBT)",
-                tyLe: tyLe.tyLeSanXuat,
-                kWh: sanLuongSX,
-                donGia: ElectricityPrice.donGiaSanXuat,
-                tienTruocVAT: tienSX,
-                tienVAT: tienSX * vatRate,
-                tongTien: tienSX * (1 + vatRate)
-            ),
-            NhomTien(
-                tenNhom: "Kinh doanh dịch vụ (KDDV)",
-                tyLe: tyLe.tyLeKinhDoanh,
-                kWh: sanLuongKD,
-                donGia: ElectricityPrice.donGiaKinhDoanh,
-                tienTruocVAT: tienKD,
-                tienVAT: tienKD * vatRate,
-                tongTien: tienKD * (1 + vatRate)
-            ),
-            NhomTien(
-                tenNhom: "HCSN (Bệnh viện, nhà trẻ, mẫu giáo, trường học)",
-                tyLe: tyLe.tyLeHCSNBenhVien,
-                kWh: sanLuongHCSNBenhVien,
-                donGia: ElectricityPrice.donGiaHCSNBenhVien,
-                tienTruocVAT: tienHCSNBenhVien,
-                tienVAT: tienHCSNBenhVien * vatRate,
-                tongTien: tienHCSNBenhVien * (1 + vatRate)
-            ),
-            NhomTien(
-                tenNhom: "HCSN (Chiếu sáng công cộng, đơn vị HCSN)",
-                tyLe: tyLe.tyLeHCSNChieuSang,
-                kWh: sanLuongHCSNChieuSang,
-                donGia: ElectricityPrice.donGiaHCSNChieuSang,
-                tienTruocVAT: tienHCSNChieuSang,
-                tienVAT: tienHCSNChieuSang * vatRate,
-                tongTien: tienHCSNChieuSang * (1 + vatRate)
-            )
+        let chiTietNhom = [
+            NhomTien(tenNhom: "SHBT", tyLe: tyLe.tyLeSinhHoat, kWh: sanLuongSH, donGia: 0, tienTruocVAT: tienSH.tienTruocVAT, tienVAT: tienSH.tienVAT, tongTien: tienSH.tienTruocVAT + tienSH.tienVAT),
+            NhomTien(tenNhom: "SXBT", tyLe: tyLe.tyLeSanXuat, kWh: sanLuongSX, donGia: ElectricityPrice.donGiaSanXuat, tienTruocVAT: tienSX, tienVAT: tienSX * vatRate, tongTien: tienSX * (1 + vatRate)),
+            NhomTien(tenNhom: "KDDV", tyLe: tyLe.tyLeKinhDoanh, kWh: sanLuongKD, donGia: ElectricityPrice.donGiaKinhDoanh, tienTruocVAT: tienKD, tienVAT: tienKD * vatRate, tongTien: tienKD * (1 + vatRate)),
+            NhomTien(tenNhom: "HCSN(BV)", tyLe: tyLe.tyLeHCSNBenhVien, kWh: sanLuongHCSNBenhVien, donGia: ElectricityPrice.donGiaHCSNBenhVien, tienTruocVAT: tienHCSNBenhVien, tienVAT: tienHCSNBenhVien * vatRate, tongTien: tienHCSNBenhVien * (1 + vatRate)),
+            NhomTien(tenNhom: "HCSN(CS)", tyLe: tyLe.tyLeHCSNChieuSang, kWh: sanLuongHCSNChieuSang, donGia: ElectricityPrice.donGiaHCSNChieuSang, tienTruocVAT: tienHCSNChieuSang, tienVAT: tienHCSNChieuSang * vatRate, tongTien: tienHCSNChieuSang * (1 + vatRate))
         ]
         
-        return CalculationResult(
-            tongTienDungGia: tongTienDungGia,
-            tongTienDaTinh: tongTienDaTinh,
-            chenhLech: chenhLech,
-            chiTietTienDungGia: chiTietDungGia,
-            chiTietSHBacThang: tienSH.chiTietBac
-        )
+        return (tongTien, tienSH.chiTietBac, chiTietNhom)
     }
     
-    private func tinhTienSinhHoat(sanLuong: Double) -> (tienTruocVAT: Double, tienVAT: Double, chiTietBac: [BacTien]) {
-        let bac1 = ElectricityPrice.SinhHoatBacThang.bac1
-        let bac2 = ElectricityPrice.SinhHoatBacThang.bac2
-        let bac3 = ElectricityPrice.SinhHoatBacThang.bac3
-        let bac4 = ElectricityPrice.SinhHoatBacThang.bac4
-        let bac5 = ElectricityPrice.SinhHoatBacThang.bac5
-        let bac6 = ElectricityPrice.SinhHoatBacThang.bac6
+    private func tinhTienSinhHoat(sanLuong: Double, soHo: Int) -> (tienTruocVAT: Double, tienVAT: Double, chiTietBac: [BacTien]) {
+        let multi = Double(max(1, soHo)) // Số hộ nhân định mức
+        
+        let dms = [
+            (min: 1, max: Int(50 * multi), price: ElectricityPrice.SinhHoatBacThang.bac1.price, label: "Bậc 1"),
+            (min: Int(50 * multi) + 1, max: Int(100 * multi), price: ElectricityPrice.SinhHoatBacThang.bac2.price, label: "Bậc 2"),
+            (min: Int(100 * multi) + 1, max: Int(200 * multi), price: ElectricityPrice.SinhHoatBacThang.bac3.price, label: "Bậc 3"),
+            (min: Int(200 * multi) + 1, max: Int(300 * multi), price: ElectricityPrice.SinhHoatBacThang.bac4.price, label: "Bậc 4"),
+            (min: Int(300 * multi) + 1, max: Int(400 * multi), price: ElectricityPrice.SinhHoatBacThang.bac5.price, label: "Bậc 5"),
+            (min: Int(400 * multi) + 1, max: Int.max, price: ElectricityPrice.SinhHoatBacThang.bac6.price, label: "Bậc 6")
+        ]
         
         var tienTruocVAT: Double = 0
         var chiTietBac: [BacTien] = []
-        
         var remaining = sanLuong
         
-        let tinhBac = { (bac: (min: Int, max: Int, price: Double), remaining: inout Double) -> BacTien in
-            let maxTrongBac = Double(bac.max - bac.min + 1)
-            let tieuThuTrongBac = min(remaining, maxTrongBac)
-            let tien = tieuThuTrongBac * bac.price
-            remaining -= tieuThuTrongBac
-            return BacTien(
-                tenBac: "Bậc \(bac.price == 1984 ? "1 (từ 1-50)" : bac.price == 2050 ? "2 (từ 51-100)" : bac.price == 2380 ? "3 (từ 101-200)" : bac.price == 2998 ? "4 (từ 201-300)" : bac.price == 3350 ? "5 (từ 301-400)" : "6 (từ 401 kWh trở lên)")",
-                kWh: tieuThuTrongBac,
-                donGia: bac.price,
+        for dm in dms {
+            if remaining <= 0 { break }
+            let maxTrongBac = dm.max == Int.max ? Double.infinity : Double(dm.max - dm.min + 1)
+            let tieuThu = min(remaining, maxTrongBac)
+            let tien = tieuThu * dm.price
+            
+            chiTietBac.append(BacTien(
+                tenBac: "\(dm.label) (\(dm.min)-\(dm.max == Int.max ? "+" : "\(dm.max)"))",
+                kWh: tieuThu,
+                donGia: dm.price,
                 tien: tien
-            )
-        }
-        
-        if remaining > 0 {
-            let bac = tinhBac(bac1, &remaining)
-            tienTruocVAT += bac.tien
-            chiTietBac.append(bac)
-        }
-        
-        if remaining > 0 {
-            let bac = tinhBac(bac2, &remaining)
-            tienTruocVAT += bac.tien
-            chiTietBac.append(bac)
-        }
-        
-        if remaining > 0 {
-            let bac = tinhBac(bac3, &remaining)
-            tienTruocVAT += bac.tien
-            chiTietBac.append(bac)
-        }
-        
-        if remaining > 0 {
-            let bac = tinhBac(bac4, &remaining)
-            tienTruocVAT += bac.tien
-            chiTietBac.append(bac)
-        }
-        
-        if remaining > 0 {
-            let bac = tinhBac(bac5, &remaining)
-            tienTruocVAT += bac.tien
-            chiTietBac.append(bac)
-        }
-        
-        if remaining > 0 {
-            let bac = tinhBac(bac6, &remaining)
-            tienTruocVAT += bac.tien
-            chiTietBac.append(bac)
+            ))
+            
+            tienTruocVAT += tien
+            remaining -= tieuThu
         }
         
         let tienVAT = tienTruocVAT * vatRate
-        
         return (tienTruocVAT, tienVAT, chiTietBac)
-    }
-    
-    private func tinhTienDaApDung(loaiGia: CustomerType, tongSanLuong: Double, phiKhac: Double) -> Double {
-        let tienTruocVAT: Double
-        let tienVAT: Double
-        
-        switch loaiGia {
-        case .sinhHoat:
-            let result = tinhTienSinhHoat(sanLuong: tongSanLuong)
-            tienTruocVAT = result.tienTruocVAT
-            tienVAT = result.tienVAT
-        case .sanXuat:
-            tienTruocVAT = tongSanLuong * ElectricityPrice.donGiaSanXuat
-            tienVAT = tienTruocVAT * vatRate
-        case .kinhDoanh:
-            tienTruocVAT = tongSanLuong * ElectricityPrice.donGiaKinhDoanh
-            tienVAT = tienTruocVAT * vatRate
-        case .hcsnBenhVien:
-            tienTruocVAT = tongSanLuong * ElectricityPrice.donGiaHCSNBenhVien
-            tienVAT = tienTruocVAT * vatRate
-        case .hcsnChieuSang:
-            tienTruocVAT = tongSanLuong * ElectricityPrice.donGiaHCSNChieuSang
-            tienVAT = tienTruocVAT * vatRate
-        }
-        
-        let tongTien = tienTruocVAT + tienVAT + phiKhac
-        return tongTien
     }
 }

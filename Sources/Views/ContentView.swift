@@ -26,6 +26,12 @@ struct CalculatorHomeView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
+                    Image("AppLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 100)
+                        .padding(.top, 10)
+                    
                     ThongTinKhachHangView()
                     TyLeSuDungView()
                     NutTinhToanView()
@@ -66,45 +72,186 @@ struct ThongTinKhachHangView: View {
     @EnvironmentObject var viewModel: CalculatorViewModel
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Thông tin khách hàng", systemImage: "person.circle")
+        VStack(alignment: .leading, spacing: 14) {
+            Label("Thông tin định mức & Hợp đồng", systemImage: "doc.text.fill")
                 .font(.headline)
             
             TextField("Mã khách hàng", text: $viewModel.customerInfo.maKhachHang)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
-                .keyboardType(.default)
+            
+            // Nhập số hộ
+            HStack(spacing: 15) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Số hộ đăng ký")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Stepper("\(viewModel.customerInfo.soHoApplied) hộ", value: $viewModel.customerInfo.soHoApplied, in: 1...20)
+                        .font(.subheadline)
+                }
+                
+                Divider().frame(height: 30)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Số hộ thực tế")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Stepper("\(viewModel.customerInfo.soHoReality) hộ", value: $viewModel.customerInfo.soHoReality, in: 1...20)
+                        .font(.subheadline)
+                }
+            }
+            .padding(.vertical, 4)
+            
+            Divider()
+
             
             HStack {
-                Text("Tổng sản lượng (kWh)")
+                Text("Danh sách tháng tính toán")
+                    .font(.subheadline)
+                    .fontWeight(.bold)
                 Spacer()
-                TextField("0", value: $viewModel.customerInfo.tongSanLuong, format: .number)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .keyboardType(.decimalPad)
-                    .frame(width: 120)
-                    .multilineTextAlignment(.trailing)
+                Button(action: { viewModel.addMonth() }) {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundColor(.green)
+                    Text("Thêm tháng")
+                        .font(.caption)
+                }
             }
             
-            HStack {
-                Text("Loại giá đã áp dụng")
-                Spacer()
-                Picker("", selection: $viewModel.customerInfo.loaiGiaDaApDung) {
-                    ForEach(CustomerType.allCases) { type in
-                        Text(type.rawValue).tag(type)
+            ForEach($viewModel.customerInfo.months) { $month in
+                VStack(spacing: 8) {
+                    HStack {
+                        Text(month.name)
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                        Spacer()
+                        if viewModel.customerInfo.months.count > 1 {
+                            Button(action: {
+                                if let index = viewModel.customerInfo.months.firstIndex(where: { $0.id == month.id }) {
+                                    viewModel.removeMonth(at: IndexSet(integer: index))
+                                }
+                            }) {
+                                Image(systemName: "trash.fill")
+                                    .foregroundColor(.red)
+                                    .font(.caption)
+                            }
+                        }
+                    }
+                    
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Sản lượng (kWh)")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                            TextField("0", value: $month.consumption, format: .number)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .keyboardType(.decimalPad)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Phí khác (đ)")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                            TextField("0", value: $month.otherFee, format: .number)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .keyboardType(.decimalPad)
+                        }
+                    }
+                    
+                    VStack(spacing: 4) {
+                        // 1. Tỷ lệ ÁP DỤNG (Hợp đồng tháng này)
+                        DisclosureGroup {
+                            VStack(spacing: 8) {
+                                ProportionRow(label: "SHBT", value: $month.tyLeApplied.tyLeSinhHoat)
+                                ProportionRow(label: "SXBT", value: $month.tyLeApplied.tyLeSanXuat)
+                                ProportionRow(label: "KDDV", value: $month.tyLeApplied.tyLeKinhDoanh)
+                                ProportionRow(label: "HCSN(BV)", value: $month.tyLeApplied.tyLeHCSNBenhVien)
+                                ProportionRow(label: "HCSN(CS)", value: $month.tyLeApplied.tyLeHCSNChieuSang)
+                                
+                                HStack {
+                                    Text("Tổng tỷ lệ áp dụng")
+                                        .font(.system(size: 8))
+                                        .fontWeight(.bold)
+                                    Spacer()
+                                    Text("\(Int(month.tyLeApplied.tongTyLe * 100))%")
+                                        .font(.system(size: 8))
+                                        .foregroundColor(month.tyLeApplied.hopLe ? .green : .red)
+                                }
+                            }
+                            .padding(.top, 4)
+                        } label: {
+                            HStack {
+                                Text("Tỷ lệ đang áp dụng (Hệ thống)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                if !month.tyLeApplied.hopLe {
+                                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red).font(.caption2)
+                                }
+                            }
+                        }
+                        .accentColor(.gray)
+
+                        // 2. Tỷ lệ THỰC TẾ (Kiểm tra tháng này)
+                        DisclosureGroup {
+                            VStack(spacing: 8) {
+                                ProportionRow(label: "SHBT", value: $month.tyLeReality.tyLeSinhHoat)
+                                ProportionRow(label: "SXBT", value: $month.tyLeReality.tyLeSanXuat)
+                                ProportionRow(label: "KDDV", value: $month.tyLeReality.tyLeKinhDoanh)
+                                ProportionRow(label: "HCSN(BV)", value: $month.tyLeReality.tyLeHCSNBenhVien)
+                                ProportionRow(label: "HCSN(CS)", value: $month.tyLeReality.tyLeHCSNChieuSang)
+                                
+                                HStack {
+                                    Text("Tổng tỷ lệ thực tế")
+                                        .font(.system(size: 8))
+                                        .fontWeight(.bold)
+                                    Spacer()
+                                    Text("\(Int(month.tyLeReality.tongTyLe * 100))%")
+                                        .font(.system(size: 8))
+                                        .foregroundColor(month.tyLeReality.hopLe ? .green : .red)
+                                }
+                            }
+                            .padding(.top, 4)
+                        } label: {
+                            HStack {
+                                Text("Tỷ lệ sử dụng thực tế (Kiểm tra)")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                                Spacer()
+                                if !month.tyLeReality.hopLe {
+                                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red).font(.caption2)
+                                }
+                            }
+                        }
                     }
                 }
-                .pickerStyle(MenuPickerStyle())
-                .labelsHidden()
+                .padding()
+                .background(Color.white.opacity(0.8))
+                .cornerRadius(12)
+                .shadow(color: .black.opacity(0.05), radius: 2)
             }
             
+            Divider()
+            
             HStack {
-                Text("Phí khác (đồng)")
+                VStack(alignment: .leading) {
+                    Text("TỔNG SẢN LƯỢNG:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("\(NumberFormatters.formatDecimal(viewModel.customerInfo.tongSanLuong)) kWh")
+                        .font(.headline)
+                        .foregroundColor(.blue)
+                }
                 Spacer()
-                TextField("0", value: $viewModel.customerInfo.phKhac, format: .number)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .keyboardType(.decimalPad)
-                    .frame(width: 120)
-                    .multilineTextAlignment(.trailing)
+                VStack(alignment: .trailing) {
+                    Text("TỔNG PHÍ KHÁC:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(NumberFormatters.formatCurrency(viewModel.customerInfo.tongPhiKhac))
+                        .font(.headline)
+                        .foregroundColor(.orange)
+                }
             }
+            .padding(.top, 4)
         }
         .padding()
         .background(Color(.systemGray6))
@@ -112,86 +259,27 @@ struct ThongTinKhachHangView: View {
     }
 }
 
-struct TyLeSuDungView: View {
-    @EnvironmentObject var viewModel: CalculatorViewModel
+struct ProportionRow: View {
+    let label: String
+    @Binding var value: Double
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Tỷ lệ sử dụng thực tế (%)", systemImage: "chart.pie")
-                .font(.headline)
-            
-            HStack {
-                Text("Sinh hoạt bậc thang")
-                Spacer()
-                TextField("0", value: $viewModel.tyLeSuDung.tyLeSinhHoat, format: .percent)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .keyboardType(.decimalPad)
-                    .frame(width: 80)
-                    .multilineTextAlignment(.trailing)
-            }
-            
-            HStack {
-                Text("Sản xuất bình thường")
-                Spacer()
-                TextField("0", value: $viewModel.tyLeSuDung.tyLeSanXuat, format: .percent)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .keyboardType(.decimalPad)
-                    .frame(width: 80)
-                    .multilineTextAlignment(.trailing)
-            }
-            
-            HStack {
-                Text("Kinh doanh dịch vụ")
-                Spacer()
-                TextField("0", value: $viewModel.tyLeSuDung.tyLeKinhDoanh, format: .percent)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .keyboardType(.decimalPad)
-                    .frame(width: 80)
-                    .multilineTextAlignment(.trailing)
-            }
-            
-            HStack {
-                Text("HCSN (Bệnh viện, nhà trẻ, mẫu giáo, trường học)")
-                    .font(.footnote)
-                Spacer()
-                TextField("0", value: $viewModel.tyLeSuDung.tyLeHCSNBenhVien, format: .percent)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .keyboardType(.decimalPad)
-                    .frame(width: 80)
-                    .multilineTextAlignment(.trailing)
-            }
-
-            HStack {
-                Text("HCSN (Chiếu sáng công cộng, đơn vị HCSN)")
-                    .font(.footnote)
-                Spacer()
-                TextField("0", value: $viewModel.tyLeSuDung.tyLeHCSNChieuSang, format: .percent)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .keyboardType(.decimalPad)
-                    .frame(width: 80)
-                    .multilineTextAlignment(.trailing)
-            }
-            
-            Divider()
-            
-            HStack {
-                Text("Tổng tỷ lệ")
-                    .fontWeight(.semibold)
-                Spacer()
-                Text("\(Int(viewModel.tyLeSuDung.tongTyLe * 100))%")
-                    .fontWeight(.bold)
-                    .foregroundColor(viewModel.tyLeSuDung.hopLe ? .green : .red)
-            }
-            
-            if !viewModel.tyLeSuDung.hopLe {
-                Text("Tổng tỷ lệ phải bằng 100%")
-                    .font(.caption)
-                    .foregroundColor(.red)
-            }
+        HStack {
+            Text(label)
+                .font(.caption)
+            Spacer()
+            TextField("0", value: $value, format: .percent)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .keyboardType(.decimalPad)
+                .frame(width: 80)
+                .multilineTextAlignment(.trailing)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+    }
+}
+
+struct TyLeSuDungView: View {
+    var body: some View {
+        EmptyView() // Đã tích hợp vào từng tháng và thông tin khách hàng
     }
 }
 
@@ -205,7 +293,7 @@ struct NutTinhToanView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!viewModel.tyLeSuDung.hopLe || viewModel.customerInfo.tongSanLuong <= 0)
+            .disabled(!viewModel.isInputValid)
             
             Button(action: { viewModel.lamMoi() }) {
                 Label("Làm mới", systemImage: "arrow.counterclockwise")
@@ -264,9 +352,56 @@ struct KetQuaView: View {
                     .foregroundColor(.blue)
             }
             
+            if !result.chiTietTheoThang.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Báo cáo chi tiết từng tháng")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.blue)
+                    
+                    ForEach(result.chiTietTheoThang) { mResult in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("\(mResult.tenThang):")
+                                    .fontWeight(.semibold)
+                                Spacer()
+                                Text("\(NumberFormatters.formatDecimal(mResult.sanLuong)) kWh")
+                                Text(NumberFormatters.formatCurrency(mResult.tiềnDungGia))
+                                    .foregroundColor(.blue)
+                            }
+                            .font(.caption)
+                            
+                            // Hiển thị bậc thang nhỏ gọn cho tháng này
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(mResult.chiTietBac, id: \.tenBac) { bac in
+                                    if bac.kWh > 0 {
+                                        HStack {
+                                            Text(bac.tenBac.replacingOccurrences(of: " (từ ", with: "(").replacingOccurrences(of: " kWh trở lên)", with: "+)"))
+                                                .font(.system(size: 8))
+                                                .foregroundColor(.secondary)
+                                            Spacer()
+                                            Text("\(NumberFormatters.formatDecimal(bac.kWh)) kWh")
+                                                .font(.system(size: 8))
+                                            Text(NumberFormatters.formatCurrency(bac.tien))
+                                                .font(.system(size: 8))
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.leading, 10)
+                            
+                            Divider()
+                        }
+                    }
+                }
+                .padding()
+                .background(Color.blue.opacity(0.05))
+                .cornerRadius(8)
+            }
+            
             if !result.chiTietSHBacThang.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Chi tiết SH bậc thang")
+                    Text("Tổng cộng chi tiết các bậc (Toàn giai đoạn)")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                     

@@ -43,11 +43,32 @@ enum CustomerType: String, CaseIterable, Identifiable {
     }
 }
 
+struct MonthData: Identifiable {
+    let id = UUID()
+    var name: String = ""
+    var consumption: Double = 0
+    var otherFee: Double = 0
+    var tyLeReality: TyLeSuDung = TyLeSuDung() // Tỷ lệ thực tế (Kiểm tra)
+    var tyLeApplied: TyLeSuDung = TyLeSuDung() // Tỷ lệ đang áp dụng (Hệ thống)
+}
+
 struct CustomerInfo {
     var maKhachHang: String = ""
-    var tongSanLuong: Double = 0
-    var loaiGiaDaApDung: CustomerType = .sinhHoat
-    var phKhac: Double = 0
+    var months: [MonthData] = [MonthData(name: "Tháng 1")]
+    
+    // Thông tin định mức chung
+    var soHoApplied: Int = 1
+    var soHoReality: Int = 1
+    
+    var loaiGiaDaApDung: CustomerType = .sinhHoat // Vẫn giữ làm nhãn mặc định
+    
+    var tongSanLuong: Double {
+        months.reduce(0) { $0 + $1.consumption }
+    }
+    
+    var tongPhiKhac: Double {
+        months.reduce(0) { $0 + $1.otherFee }
+    }
 }
 
 struct TyLeSuDung {
@@ -72,6 +93,15 @@ struct CalculationResult {
     var chenhLech: Double = 0
     var chiTietTienDungGia: [NhomTien] = []
     var chiTietSHBacThang: [BacTien] = []
+    var chiTietTheoThang: [MonthResult] = []
+}
+
+struct MonthResult: Identifiable {
+    let id = UUID()
+    var tenThang: String
+    var sanLuong: Double
+    var tiềnDungGia: Double
+    var chiTietBac: [BacTien]
 }
 
 struct NhomTien {

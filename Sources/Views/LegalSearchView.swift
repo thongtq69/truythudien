@@ -11,6 +11,16 @@ struct TraCuuPhapLyView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Spacer()
+                        Image("AppLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 80)
+                        Spacer()
+                    }
+                    .padding(.top, 10)
+
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Câu hỏi")
                             .font(.headline)
