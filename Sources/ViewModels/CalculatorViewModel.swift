@@ -71,4 +71,31 @@ final class CalculatorViewModel: ObservableObject {
             ]
         )
     }
+    
+    func saveResult() {
+        guard let result = result else { return }
+        
+        Task {
+            do {
+                let body: [String: String] = [
+                    "customerCode": customerInfo.maKhachHang,
+                    "customerName": "Khách hàng mới",
+                    "totalDungGia": "\(result.tongTienDungGia)",
+                    "totalDaTinh": "\(result.tongTienDaTinh)",
+                    "diff": "\(result.chenhLech)"
+                ]
+                
+                let data = try JSONEncoder().encode(body)
+                let _: CalculationSaveResponse = try await NetworkService.shared.request(
+                    endpoint: "/calculations",
+                    method: "POST",
+                    body: data,
+                    token: AuthService.shared.token
+                )
+                print("Saved result successfully")
+            } catch {
+                print("Failed to save result: \(error)")
+            }
+        }
+    }
 }

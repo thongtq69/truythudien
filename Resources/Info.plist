@@ -7,7 +7,7 @@
 	<key>AIProviderChatEndpoint</key>
 	<string>https://opencode.ai/zen/v1/chat/completions</string>
 	<key>AIProviderChatModel</key>
-	<string>big-pickle</string>
+	<string>kimi-k2.5-free</string>
 	<key>AIProviderEmbeddingEndpoint</key>
 	<string></string>
 	<key>AIProviderEmbeddingModel</key>

@@ -1,5 +1,10 @@
 import Foundation
 import PDFKit
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 struct LegalCitation: Identifiable {
     let id = UUID()
@@ -21,38 +26,76 @@ final class LegalSearchViewModel: ObservableObject {
     private var subjectPhrase: String?
 
     private let store: LegalIndexStore?
-    private let aiService: OpenAICompatibleService?
+    private var aiService: OpenAICompatibleService?
     private let embeddingEnabled: Bool
     private var chunks: [LegalChunk] = []
+
+    enum AIModel: String, CaseIterable, Identifiable {
+        case bigPickle = "big-pickle"
+        case kimi = "kimi-k2.5-free"
+        case glm4 = "glm-4.7-free"
+        
+        var id: String { self.rawValue }
+        var displayName: String {
+            switch self {
+            case .bigPickle: return "Big Pickle"
+            case .kimi: return "Kimi K2.5"
+            case .glm4: return "GLM-4.7"
+            }
+        }
+    }
+    @Published var selectedModel: AIModel = .kimi {
+        didSet {
+            updateAIService()
+        }
+    }
     private var didPrepare = false
     private var indexingTask: Task<Void, Never>?
 
+    private struct IdentifiedSection {
+        let docId: String
+        let pageRange: ClosedRange<Int>
+    }
+
     init() {
         self.store = try? LegalIndexStore()
+        
+        // Load default model from config
+        if let configModel = Bundle.main.object(forInfoDictionaryKey: "AIProviderChatModel") as? String,
+           let model = AIModel(rawValue: configModel.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            self.selectedModel = model
+        }
+
+        // Initial setup
+        let embeddingModel = (Bundle.main.object(forInfoDictionaryKey: "AIProviderEmbeddingModel") as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let embeddingEndpoint = (Bundle.main.object(forInfoDictionaryKey: "AIProviderEmbeddingEndpoint") as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.embeddingEnabled = (embeddingModel != nil && !embeddingModel!.isEmpty) && (embeddingEndpoint != nil && !embeddingEndpoint!.isEmpty)
+        
+        updateAIService()
+    }
+
+    private func updateAIService() {
         let apiKey = (Bundle.main.object(forInfoDictionaryKey: "AIProviderAPIKey") as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let chatEndpoint = (Bundle.main.object(forInfoDictionaryKey: "AIProviderChatEndpoint") as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let chatModel = (Bundle.main.object(forInfoDictionaryKey: "AIProviderChatModel") as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let embeddingEndpoint = (Bundle.main.object(forInfoDictionaryKey: "AIProviderEmbeddingEndpoint") as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let embeddingModel = (Bundle.main.object(forInfoDictionaryKey: "AIProviderEmbeddingModel") as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if let apiKey, !apiKey.isEmpty,
            let chatEndpoint, !chatEndpoint.isEmpty,
-           let chatModel, !chatModel.isEmpty,
            let chatURL = URL(string: chatEndpoint) {
             let embedding = embeddingModel?.isEmpty == true ? nil : embeddingModel
             let embeddingURL = embeddingEndpoint?.isEmpty == true ? nil : embeddingEndpoint
-            print("[LegalSearch] AI config: model=\(chatModel) chat=\(chatEndpoint) embed=\(embeddingURL ?? "nil")")
+            
+            print("[LegalSearch] Switching to model: \(selectedModel.rawValue)")
             self.aiService = OpenAICompatibleService(
                 apiKey: apiKey,
                 chatEndpoint: chatURL,
                 embeddingEndpoint: embeddingURL.flatMap(URL.init(string:)),
-                chatModel: chatModel,
+                chatModel: selectedModel.rawValue,
                 embeddingModel: embedding
             )
-            self.embeddingEnabled = embedding != nil && embeddingURL != nil
         } else {
             self.aiService = nil
-            self.embeddingEnabled = false
         }
     }
 
@@ -76,7 +119,7 @@ final class LegalSearchViewModel: ObservableObject {
         }
 
         isLoading = true
-        statusMessage = nil
+        statusMessage = "Đang phân tích câu hỏi..."
         answer = ""
         citations = []
         subjectPhrase = extractSubjectPhrase(from: trimmed)
@@ -93,29 +136,47 @@ final class LegalSearchViewModel: ObservableObject {
             await indexingTask?.value
 
             do {
-                let topMatches: [LegalChunk]
                 var effectiveQuery = trimmed
-                
-                // Nếu người dùng bọc cả câu hỏi trong dấu ngoặc kép, hãy loại bỏ chúng để tìm kiếm hiệu quả hơn
                 if effectiveQuery.hasPrefix("\"") && effectiveQuery.hasSuffix("\"") && effectiveQuery.count > 2 {
                     effectiveQuery = String(effectiveQuery.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
                 }
 
-                if isQuoteRequest(effectiveQuery), let subjectPhrase, !subjectPhrase.isEmpty {
-                    let matches = chunks.filter { chunk in
-                        containsPhrase(subjectPhrase, in: chunk.text)
-                    }
-                    if !matches.isEmpty {
-                        topMatches = Array(matches.prefix(10))
+                var topMatches: [LegalChunk] = []
+                
+                // Bước 1: Agentic Search - Phân tích mục lục qua TOC
+                statusMessage = "Đang xác định mục lục tài liệu liên quan..."
+                let identified = await identifyRelevantSections(query: effectiveQuery, service: aiService)
+                
+                if !identified.isEmpty {
+                    print("[LegalSearch] Identified sections: \(identified.map { "\($0.docId):\($0.pageRange)" })")
+                    statusMessage = "Đang đọc nội dung chi tiết từ các mục đã chọn..."
+                    topMatches = extractChunks(for: identified)
+                }
+                
+                // Fallback nếu không xác định được mục hoặc mục rỗng
+                if topMatches.isEmpty {
+                    statusMessage = "Đang tra cứu thông minh trên toàn bộ tài liệu..."
+                    if isQuoteRequest(effectiveQuery), let subjectPhrase, !subjectPhrase.isEmpty {
+                        let matches = chunks.filter { containsPhrase(subjectPhrase, in: $0.text) }
+                        if !matches.isEmpty {
+                            topMatches = Array(matches.prefix(10))
+                        } else {
+                            topMatches = try await selectTopMatches(query: effectiveQuery, service: aiService)
+                        }
                     } else {
-                        // Fallback nếu không tìm thấy phrase chính xác trong môi trường quote request
-                        print("[LegalSearch] Quote phrase not found, falling back to smart search")
                         topMatches = try await selectTopMatches(query: effectiveQuery, service: aiService)
                     }
-                } else {
-                    topMatches = try await selectTopMatches(query: effectiveQuery, service: aiService)
                 }
-                print("[LegalSearch] top matches: \(topMatches.count) for query: \(effectiveQuery)")
+
+                print("[LegalSearch] search segments found: \(topMatches.count)")
+                
+                if topMatches.isEmpty {
+                    answer = "Không tìm thấy nội dung liên quan trong cơ sở dữ liệu pháp luật."
+                    statusMessage = nil
+                    isLoading = false
+                    return
+                }
+
                 let prompt = buildPrompt(question: effectiveQuery, chunks: topMatches)
                 citations = topMatches.map { chunk in
                     LegalCitation(
@@ -126,32 +187,84 @@ final class LegalSearchViewModel: ObservableObject {
                     )
                 }
 
-                if topMatches.isEmpty {
-                    answer = "Không tìm thấy trong tài liệu."
-                    statusMessage = nil
-                    isLoading = false
-                    return
-                }
-
-
-
+                statusMessage = "AI đang xử lý và tổng hợp câu trả lời..."
                 do {
                     let response = try await generateWithRetry(prompt: prompt, service: aiService)
                     answer = response.trimmingCharacters(in: .whitespacesAndNewlines)
                     statusMessage = nil
                 } catch {
                     answer = buildFallbackAnswer(from: topMatches)
-                    statusMessage = topMatches.isEmpty
-                        ? "AI bận hoặc lỗi xác thực."
-                        : "AI bận hoặc lỗi xác thực. Hiển thị trích dẫn liên quan."
-                    print("[LegalSearch] generate fallback: \(error)")
+                    statusMessage = "Lỗi kết nối AI. Hiển thị thông tin trích dẫn thô."
+                    print("[LegalSearch] generate error: \(error)")
                 }
             } catch {
-                statusMessage = "Không thể tra cứu: \(error.localizedDescription)"
-                print("[LegalSearch] search error: \(error)")
+                statusMessage = "Đã xảy ra lỗi: \(error.localizedDescription)"
+                print("[LegalSearch] search task error: \(error)")
             }
             isLoading = false
         }
+    }
+
+    private func identifyRelevantSections(query: String, service: OpenAICompatibleService) async -> [IdentifiedSection] {
+        let toc = DocumentMetadata.getFullTOC()
+        let prompt = """
+        Dựa trên danh lục các văn bản pháp luật dưới đây, hãy xác định (các) văn bản và (các) khoảng trang liên quan nhất đến câu hỏi của người dùng.
+        
+        DANH LỤC MỤC LỤC:
+        \(toc)
+        
+        CÂU HỎI NGƯỜI DÙNG: \(query)
+        
+        HƯỚNG DẪN:
+        - Chỉ chọn tối đa 3 phần liên quan nhất.
+        - Trả về kết quả theo định dạng chính xác: ID_VAN_BAN: TRANG_BAT_DAU-TRANG_KET_THUC
+        - Mỗi phần một dòng.
+        - Ví dụ: nghiDinh17_2022: 1-15
+        - Nếu hoàn toàn không thấy phần nào liên quan, trả về 'NONE'.
+        - KHÔNG giải thích gì thêm.
+        """
+        
+        do {
+            let response = try await service.generate(prompt: prompt)
+            return parseIdentifiedSections(response: response)
+        } catch {
+            print("[LegalSearch] identitySections error: \(error)")
+            return []
+        }
+    }
+
+    private func parseIdentifiedSections(response: String) -> [IdentifiedSection] {
+        var sections: [IdentifiedSection] = []
+        let lines = response.components(separatedBy: .newlines)
+        
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed == "NONE" || trimmed.isEmpty { continue }
+            
+            let parts = trimmed.components(separatedBy: ":")
+            guard parts.count == 2 else { continue }
+            
+            let docId = parts[0].trimmingCharacters(in: .whitespaces)
+            let rangeParts = parts[1].components(separatedBy: "-")
+            guard rangeParts.count == 2,
+                  let start = Int(rangeParts[0].trimmingCharacters(in: .whitespaces)),
+                  let end = Int(rangeParts[1].trimmingCharacters(in: .whitespaces)) else { continue }
+            
+            sections.append(IdentifiedSection(docId: docId, pageRange: start...end))
+        }
+        return sections
+    }
+
+    private func extractChunks(for sections: [IdentifiedSection]) -> [LegalChunk] {
+        var result: [LegalChunk] = []
+        for section in sections {
+            let matches = chunks.filter { 
+                $0.docId == section.docId && section.pageRange.contains($0.pageNumber)
+            }
+            // Ưu tiên các chunks trong mục đó
+            result.append(contentsOf: matches.prefix(20))
+        }
+        return Array(result.prefix(40)) // Giới hạn tổng số để tránh quá tải AI
     }
 
     private func buildIndexIfNeeded() async {
@@ -167,59 +280,65 @@ final class LegalSearchViewModel: ObservableObject {
             return
         }
 
-        if store.hasAnyChunks() {
-            do {
-                chunks = try store.loadAllChunks()
-                statusMessage = nil
-            } catch {
-                statusMessage = "Không thể tải chỉ mục"
-                print("[LegalSearch] load index error: \(error)")
-            }
+        do {
+            chunks = try store.loadAllChunks()
+        } catch {
+            print("[LegalSearch] load initial chunks error: \(error)")
+        }
+
+        let indexedDocIds = Set(chunks.map { $0.docId })
+        let allDocIds = Set(PhapLyDocument.allCases.map { $0.rawValue })
+        
+        if allDocIds.subtracting(indexedDocIds).isEmpty {
+            statusMessage = nil
             return
         }
 
-        statusMessage = "Đang tạo chỉ mục tài liệu pháp lý..."
+        statusMessage = "Đang kiểm tra và cập nhật chỉ mục tài liệu..."
         var pendingInserts: [LegalChunkInsert] = []
-        var totalChunks = 0
+        var totalChunks = chunks.count
 
         do {
             for document in PhapLyDocument.allCases {
-                guard let url = Bundle.main.url(forResource: document.fileName, withExtension: "pdf"),
-                      let pdf = PDFDocument(url: url) else {
-                    print("[LegalSearch] missing PDF: \(document.fileName)")
+                // Chỉ xử lý tài liệu chưa được tạo chỉ mục
+                if indexedDocIds.contains(document.rawValue) {
                     continue
                 }
-
-                let pageCount = pdf.pageCount
-                for pageIndex in 0..<pageCount {
-                    let pageNumber = pageIndex + 1
-                    statusMessage = "Đang xử lý \(document.title) - trang \(pageNumber)/\(pageCount)"
-
-                    guard let page = pdf.page(at: pageIndex) else { continue }
-                    let text = page.string ?? ""
-                    let chunks = LegalTextChunker.chunk(text: text)
-                    if chunks.isEmpty {
-                        print("[LegalSearch] empty chunks \(document.title) page \(pageNumber)")
+                
+                if document.fileExtension == "pdf" {
+                    guard let url = Bundle.main.url(forResource: document.fileName, withExtension: "pdf"),
+                          let pdf = PDFDocument(url: url) else {
+                        print("[LegalSearch] missing PDF: \(document.fileName)")
+                        continue
                     }
 
-                    for (index, chunkText) in chunks.enumerated() {
-                        let embedding = try await embedIfNeeded(text: chunkText, service: aiService)
-                        pendingInserts.append(
-                            LegalChunkInsert(
-                                docId: document.rawValue,
-                                docName: document.title,
-                                pageNumber: pageNumber,
-                                chunkIndex: index,
-                                text: chunkText,
-                                embedding: embedding
-                            )
-                        )
-                        totalChunks += 1
+                    let pageCount = pdf.pageCount
+                    for pageIndex in 0..<pageCount {
+                        let pageNumber = pageIndex + 1
+                        statusMessage = "Đang xử lý \(document.title) - trang \(pageNumber)/\(pageCount)"
 
-                        if pendingInserts.count >= 20 {
-                            try store.insertChunks(pendingInserts)
-                            pendingInserts.removeAll()
-                        }
+                        guard let page = pdf.page(at: pageIndex) else { continue }
+                        let text = page.string ?? ""
+                        try await indexTextContent(text, pageNumber: pageNumber, document: document, pendingInserts: &pendingInserts, totalChunks: &totalChunks, aiService: aiService, store: store)
+                    }
+                } else if document.fileExtension == "docx" {
+                    guard let url = Bundle.main.url(forResource: document.fileName, withExtension: "docx") else {
+                        print("[LegalSearch] missing docx: \(document.fileName)")
+                        continue
+                    }
+                    
+                    statusMessage = "Đang trích xuất văn bản \(document.title)..."
+                    
+                    var extractedText: String? = nil
+                    #if canImport(UIKit) || canImport(AppKit)
+                    let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
+                        .documentType: NSAttributedString.DocumentType.officeOpenXML
+                    ]
+                    extractedText = try? NSAttributedString(url: url, options: options, documentAttributes: nil).string
+                    #endif
+                    
+                    if let text = extractedText, !text.isEmpty {
+                        try await indexTextContent(text, pageNumber: 1, document: document, pendingInserts: &pendingInserts, totalChunks: &totalChunks, aiService: aiService, store: store)
                     }
                 }
             }
@@ -512,5 +631,32 @@ final class LegalSearchViewModel: ObservableObject {
 
         guard normA > 0, normB > 0 else { return 0 }
         return dot / (sqrt(normA) * sqrt(normB))
+    }
+
+    private func indexTextContent(_ text: String, pageNumber: Int, document: PhapLyDocument, pendingInserts: inout [LegalChunkInsert], totalChunks: inout Int, aiService: OpenAICompatibleService, store: LegalIndexStore) async throws {
+        let chunks = LegalTextChunker.chunk(text: text)
+        if chunks.isEmpty {
+            print("[LegalSearch] empty chunks \(document.title) page \(pageNumber)")
+        }
+
+        for (index, chunkText) in chunks.enumerated() {
+            let embedding = try await embedIfNeeded(text: chunkText, service: aiService)
+            pendingInserts.append(
+                LegalChunkInsert(
+                    docId: document.rawValue,
+                    docName: document.title,
+                    pageNumber: pageNumber,
+                    chunkIndex: index,
+                    text: chunkText,
+                    embedding: embedding
+                )
+            )
+            totalChunks += 1
+
+            if pendingInserts.count >= 20 {
+                try store.insertChunks(pendingInserts)
+                pendingInserts.removeAll()
+            }
+        }
     }
 }

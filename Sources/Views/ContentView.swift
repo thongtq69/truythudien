@@ -1,8 +1,9 @@
 import PDFKit
-import PDFKit
 import SwiftUI
 
 struct ContentView: View {
+    @ObservedObject var auth = AuthService.shared
+    
     var body: some View {
         TabView {
             CalculatorHomeView()
@@ -14,6 +15,18 @@ struct ContentView: View {
                 .tabItem {
                     Label("Tra cứu", systemImage: "doc.text.magnifyingglass")
                 }
+
+            HistoryView()
+                .tabItem {
+                    Label("Lịch sử", systemImage: "clock.fill")
+                }
+            
+            if auth.isAdmin {
+                AdminManagementView()
+                    .tabItem {
+                        Label("Hệ thống", systemImage: "gearshape.2.fill")
+                    }
+            }
         }
     }
 }
@@ -85,7 +98,7 @@ struct ThongTinKhachHangView: View {
                     Text("Số hộ đăng ký")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    Stepper("\(viewModel.customerInfo.soHoApplied) hộ", value: $viewModel.customerInfo.soHoApplied, in: 1...20)
+                    Stepper(viewModel.customerInfo.soHoApplied == 0 ? "Không kê khai" : "\(viewModel.customerInfo.soHoApplied) hộ", value: $viewModel.customerInfo.soHoApplied, in: 0...20)
                         .font(.subheadline)
                 }
                 
@@ -95,7 +108,7 @@ struct ThongTinKhachHangView: View {
                     Text("Số hộ thực tế")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    Stepper("\(viewModel.customerInfo.soHoReality) hộ", value: $viewModel.customerInfo.soHoReality, in: 1...20)
+                    Stepper(viewModel.customerInfo.soHoReality == 0 ? "Không kê khai" : "\(viewModel.customerInfo.soHoReality) hộ", value: $viewModel.customerInfo.soHoReality, in: 0...20)
                         .font(.subheadline)
                 }
             }
@@ -305,13 +318,22 @@ struct NutTinhToanView: View {
 }
 
 struct KetQuaView: View {
+    @EnvironmentObject var viewModel: CalculatorViewModel
     let result: CalculationResult
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("Kết quả tính toán", systemImage: "checkmark.circle.fill")
-                .font(.headline)
-                .foregroundColor(.green)
+            HStack {
+                Label("Kết quả tính toán", systemImage: "checkmark.circle.fill")
+                    .font(.headline)
+                    .foregroundColor(.green)
+                Spacer()
+                Button(action: { viewModel.saveResult() }) {
+                    Label("Lưu lại", systemImage: "square.and.arrow.down")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+            }
             
             HStack {
                 Text("Tiền đã tính (sai giá)")
@@ -343,7 +365,7 @@ struct KetQuaView: View {
             .padding(.vertical, 8)
             
             if result.chenhLech > 0 {
-                Text("Khách hàng cần truy thu: \(NumberFormatters.formatCurrency(result.chenhLech))")
+                Text("Số tiền truy thu: \(NumberFormatters.formatCurrency(result.chenhLech))")
                     .font(.subheadline)
                     .foregroundColor(.red)
             } else if result.chenhLech < 0 {
@@ -485,7 +507,7 @@ struct TaiLieuPhapLyView: View {
 
     var body: some View {
         Group {
-            if let url = Bundle.main.url(forResource: document.fileName, withExtension: "pdf") {
+            if let url = Bundle.main.url(forResource: document.fileName, withExtension: document.fileExtension) {
                 PDFKitView(url: url, pageIndex: nil, highlightText: nil)
                     .edgesIgnoringSafeArea(.bottom)
             } else {

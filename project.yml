@@ -43,7 +43,7 @@ targets:
         CFBundleExecutable: $(EXECUTABLE_NAME)
         AIProviderAPIKey: "sk-mM80RgGgqWImVzTD1bozFFxQdUN5w6BCKyaVTiagmxr1ser19R8zRIwPdyT70e34"
         AIProviderChatEndpoint: "https://opencode.ai/zen/v1/chat/completions"
-        AIProviderChatModel: "big-pickle"
+        AIProviderChatModel: "kimi-k2.5-free"
         AIProviderEmbeddingEndpoint: ""
         AIProviderEmbeddingModel: ""
         UILaunchScreen:

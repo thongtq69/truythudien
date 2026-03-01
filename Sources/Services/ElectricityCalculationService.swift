@@ -94,6 +94,21 @@ final class ElectricityCalculationService {
     }
     
     private func tinhTienSinhHoat(sanLuong: Double, soHo: Int) -> (tienTruocVAT: Double, tienVAT: Double, chiTietBac: [BacTien]) {
+        if soHo == 0 {
+            let price = ElectricityPrice.SinhHoatBacThang.bac3.price
+            let tien = sanLuong * price
+            let chiTietBac = [
+                BacTien(
+                    tenBac: "KHÔNG KÊ KHAI (Giá bậc 3)",
+                    kWh: sanLuong,
+                    donGia: price,
+                    tien: tien
+                )
+            ]
+            let tienVAT = tien * vatRate
+            return (tien, tienVAT, chiTietBac)
+        }
+        
         let multi = Double(max(1, soHo)) // Số hộ nhân định mức
         
         let dms = [

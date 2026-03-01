@@ -21,21 +21,45 @@ struct TraCuuPhapLyView: View {
                     }
                     .padding(.top, 10)
 
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("Câu hỏi")
                             .font(.headline)
+                        
                         TextEditor(text: $viewModel.query)
-                            .frame(minHeight: 90)
+                            .frame(minHeight: 120)
+                            .padding(4)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color(.systemGray4))
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color(.systemGray4), lineWidth: 1)
                             )
 
+                        HStack {
+                            Text("Mô hình AI:")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            
+                            Picker("Model", selection: $viewModel.selectedModel) {
+                                ForEach(LegalSearchViewModel.AIModel.allCases) { model in
+                                    Text(model.displayName).tag(model)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .tint(.blue)
+                            
+                            Spacer()
+                        }
+                        .padding(.horizontal, 4)
+
                         Button(action: { viewModel.search() }) {
-                            Label("Tra cứu", systemImage: "sparkles")
-                                .frame(maxWidth: .infinity)
+                            HStack {
+                                Image(systemName: "sparkles")
+                                Text("Tra cứu với AI")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
                         }
                         .buttonStyle(.borderedProminent)
+                        .cornerRadius(12)
                         .disabled(viewModel.isLoading || viewModel.isIndexing)
                     }
 
@@ -167,7 +191,7 @@ struct CitationDocumentView: View {
         NavigationView {
             Group {
                 if let document = PhapLyDocument(rawValue: citation.docId),
-                   let url = Bundle.main.url(forResource: document.fileName, withExtension: "pdf") {
+                   let url = Bundle.main.url(forResource: document.fileName, withExtension: document.fileExtension) {
                     PDFKitView(
                         url: url,
                         pageIndex: max(citation.pageNumber - 1, 0),
