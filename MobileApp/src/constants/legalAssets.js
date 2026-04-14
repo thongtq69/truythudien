@@ -3,5 +3,6 @@ export const LEGAL_ASSETS = {
     'thongTu60_2025': require('../../assets/docs/tt60_2025.pdf'),
     'quyDinhGiaBanDien2025': require('../../assets/docs/qd1279_2025.pdf'),
     'quyDinhKiemTraDienLuc2022': require('../../assets/docs/tt42_2022.pdf'),
-    'nghiDinh17_2022': require('../../assets/docs/nd17_2022.pdf')
+    'nghiDinh17_2022': require('../../assets/docs/nd17_2022.pdf'),
+    'nghiDinh10_4_SonHai': require('../../assets/docs/sy_10_4.pdf')
 };

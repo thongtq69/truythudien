@@ -14,7 +14,7 @@ export default function LegalSearchScreen() {
     const [loading, setLoading] = useState(false);
     const [answer, setAnswer] = useState('');
     const [citations, setCitations] = useState([]);
-    const [selectedModel, setSelectedModel] = useState('kimi-k2.5-free');
+    const [selectedModel, setSelectedModel] = useState('glm-5-free');
     const [isPreparingDoc, setIsPreparingDoc] = useState(false);
 
     const openOriginalDoc = async (docId) => {
@@ -63,7 +63,8 @@ export default function LegalSearchScreen() {
                 { id: 'thongTu60_2025', name: 'Thông tư 60/2025/TT-BCT', keywords: ['60/2025', 'TT-BCT'] },
                 { id: 'quyDinhGiaBanDien2025', name: 'QĐ 1279/QĐ-BCT', keywords: ['1279', 'biểu giá'] },
                 { id: 'quyDinhKiemTraDienLuc2022', name: 'TT 42/2022/TT-BCT', keywords: ['42/2022', 'kiểm tra'] },
-                { id: 'nghiDinh17_2022', name: 'Nghị định 17/2022/NĐ-CP', keywords: ['17/2022', 'xử phạt'] }
+                { id: 'nghiDinh17_2022', name: 'Nghị định 17/2022/NĐ-CP', keywords: ['17/2022', 'xử phạt'] },
+                { id: 'nghiDinh10_4_SonHai', name: 'Nghị định 10-4 (Sơn Hải)', keywords: ['10-4', 'sơn hải', 'truy thu'] }
             ];
 
             const detectedCitations = docMap
@@ -87,6 +88,7 @@ export default function LegalSearchScreen() {
 
     const showModelSelector = () => {
         const models = [
+            { id: 'glm-5-free', label: 'GLM-5 (Free)' },
             { id: 'kimi-k2.5-free', label: 'Kimi K2.5 (Free)' },
             { id: 'minimax-m2.5-free', label: 'Minimax M2.5 (Free)' },
             { id: 'trinity-large-preview-free', label: 'Trinity Large (Free)' },
@@ -143,6 +145,7 @@ export default function LegalSearchScreen() {
                         <TouchableOpacity style={styles.modelSelector} onPress={showModelSelector}>
                             <Text style={styles.modelText}>
                                 {selectedModel === 'kimi-k2.5-free' ? 'Kimi K2.5' :
+                                    selectedModel === 'glm-5-free' ? 'GLM-5' :
                                     selectedModel === 'minimax-m2.5-free' ? 'Minimax M2.5' :
                                         selectedModel === 'trinity-large-preview-free' ? 'Trinity Large' : 'GLM-4.7'}
                             </Text>
@@ -210,7 +213,8 @@ export default function LegalSearchScreen() {
                         { id: 'thongTu60_2025', title: 'Thông tư 60/2025/TT-BCT' },
                         { id: 'quyDinhGiaBanDien2025', title: 'Quyết định 1279/QĐ-BCT (2025)' },
                         { id: 'quyDinhKiemTraDienLuc2022', title: 'Thông tư 42/2022/TT-BCT' },
-                        { id: 'nghiDinh17_2022', title: 'Nghị định 17/2022/NĐ-CP' }
+                        { id: 'nghiDinh17_2022', title: 'Nghị định 17/2022/NĐ-CP' },
+                        { id: 'nghiDinh10_4_SonHai', title: 'Nghị định 10-4 (Sơn Hải)' }
                     ].map((doc, index) => (
                         <TouchableOpacity
                             key={index}

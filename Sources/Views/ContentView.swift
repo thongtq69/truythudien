@@ -44,6 +44,10 @@ struct CalculatorHomeView: View {
                         .scaledToFit()
                         .frame(height: 100)
                         .padding(.top, 10)
+
+                    Text("PC Hà Tĩnh - EVNNPC")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                     
                     ThongTinKhachHangView()
                     TyLeSuDungView()

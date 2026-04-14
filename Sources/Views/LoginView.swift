@@ -10,11 +10,10 @@ struct LoginView: View {
     
     var body: some View {
         VStack(spacing: 30) {
-            Image(systemName: "bolt.shield.fill")
+            Image("AppLogo")
                 .resizable()
                 .scaledToFit()
                 .frame(width: 100, height: 100)
-                .foregroundColor(.blue)
                 .padding(.top, 50)
             
             Text("Truy Thu Điện")
@@ -46,6 +45,11 @@ struct LoginView: View {
             }
             
             Spacer()
+
+            Text("PC Hà Tĩnh - EVNNPC")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.bottom, 12)
         }
         .alert(isPresented: $showError) {
             Alert(title: Text("Lỗi"), message: Text(errorMessage), dismissButton: .default(Text("OK")))

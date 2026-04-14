@@ -1,8 +1,8 @@
 import api from '../api/network';
 
 export const AIService = {
-    async searchLegal(query, model = "kimi-k2.5-free") {
-        const candidates = [model, 'kimi-k2.5-free', 'glm-4.7-free'];
+    async searchLegal(query, model = "glm-5-free") {
+        const candidates = [model, 'glm-5-free', 'kimi-k2.5-free', 'glm-4.7-free'];
         let lastError = null;
 
         for (const candidate of candidates) {

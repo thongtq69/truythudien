@@ -42,5 +42,13 @@ export const LEGAL_METADATA = {
             { title: 'Điều 2', content: 'Sửa đổi mức phạt đối với hành vi trộm cắp điện và vi phạm an toàn hành lang điện cao áp.' },
             { title: 'Phụ lục', content: 'Danh mục các hành vi vi phạm mới và thẩm quyền xử phạt của kiểm tra viên điện lực.' }
         ]
+    },
+    'nghiDinh10_4_SonHai': {
+        title: 'Nghị định 10-4 (Sơn Hải)',
+        description: 'Văn bản hướng dẫn nghiệp vụ truy thu tiền điện và xử lý vi phạm sử dụng điện (Cập nhật 10/04/2026).',
+        sections: [
+            { title: 'Phần 1', content: 'Quy trình kiểm tra và lập biên bản hiện trường.' },
+            { title: 'Phần 2', content: 'Cách tính toán sản lượng điện năng truy thu và áp dụng các biểu giá phù hợp.' }
+        ]
     }
 };
